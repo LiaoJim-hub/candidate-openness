@@ -1,21 +1,21 @@
 # READINGS · 读数表
 
-> **本表留空。** 仓库不附带任何真实平台读数。
+> **本表留空。** 仓库不附带任何真实平台读数。  
 > 下表仅示范"一次合格读数要填哪些列"。请勿把合成样例当作证据填进来。
 
 ## 报数纪律
 
-一次合格读数**必须同时**报：`openness_main` · `openness_strict` ·
-`per_entry_openness` · `spread` · `samples` · `intents` · `suspected_rate` ·
-`uncomputable` · 口径指纹 · 效力标签 · `unknown_relations`。
+一次合格读数**必须同时**报：`openness_main` · `openness_strict` ·  
+`per_entry_openness` · `spread` · `samples` · `intents` · `suspected_rate` ·  
+`uncomputable` · 口径指纹 · 效力标签 · `unknown_relations`。  
 只报一个总占比 ⇒ 该读数**不完整**，不得引用。
 
 ---
 
-| 日期 | 入口 | 意图 | 采集条件(地区/设备/登录态) | openness_main | openness_strict | spread | samples | intents | suspected_rate | 口径指纹 | 效力 | 原始快照 | 备注 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — | — | — | — | — | — | — | 无数据 |
-| | | | | | | | | | | | | | |
+| 日期 | 入口 | 意图 | 采集条件(地区/设备/登录态) | openness_main | openness_strict | spread | samples | intents | suspected_rate | 口径指纹 | 效力 | 原始快照 | 备注  |
+| -- | -- | -- | --------------- | ------------- | --------------- | ------ | ------- | ------- | -------------- | ---- | -- | ---- | --- |
+| —  | —  | —  | —               | —             | —               | —      | —       | —       | —              | —    | —  | —    | 无数据 |
+|    |    |    |                 |               |                 |        |         |         |                |      |    |      |     |
 
 ---
 

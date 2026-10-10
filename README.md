@@ -1,7 +1,7 @@
 # 候选集开放度 · Candidate Openness
 
-> 一把量"入口选择权"的尺子。
-> **状态：可运行原型 + 完整协议 + 空采集接口。无真实数据。不内置爬虫。**
+> 一把量"入口选择权"的尺子。  
+> **状态：可运行原型 + 完整协议 + 空采集接口。无真实数据。不内置爬虫。**  
 > 协议口径 **v2.1** ｜ 代码版本 **2.1.0**
 
 ---
@@ -31,16 +31,16 @@ suspected    = 无付费标注、但具备可外部复核推广特征的"疑似�
 极差     spread          = 各入口 openness_main 的 max − min
 ```
 
-- **主口径**：只剔除"入口标注的付费位"与"关联方"；疑似位仍计入分子（它没有付费标注）。
+- **主口径**：只剔除"入口标注的付费位"与"关联方"；疑似位仍计入分子（它没有付费标注）。  
   这对应 README 的一句话定义：*非关联候选 = 既非付费位，也非关联方*。
 - **严格口径**：在主口径基础上**再**扣除疑似付费位。
 - **疑似付费位单独列出**，不并入严格口径分子；默认也不从分母剔除。
 
-> ⚠️ 只报一个 `openness_main` 是**不完整读数**。必须同时报 `openness_strict`、`spread`、
+> ⚠️ 只报一个 `openness_main` 是**不完整读数**。必须同时报 `openness_strict`、`spread`、  
 > `samples`、`suspected_rate`、`uncomputable`、口径指纹与效力标签（见下"报数纪律"）。
 
-**为什么 `spread` 必须报**：`openness_main = 0.4` 有两种完全不同的情况——
-四个入口都是 0.4（**均匀**，像行业通病），还是一个 0.8 一个 0.0（**两极**，像某家在干）。
+**为什么 `spread` 必须报**：`openness_main = 0.4` 有两种完全不同的情况——  
+四个入口都是 0.4（**均匀**，像行业通病），还是一个 0.8 一个 0.0（**两极**，像某家在干）。  
 只报一个数，会把结构差异抹平。
 
 ---
@@ -56,17 +56,20 @@ suspected    = 无付费标注、但具备可外部复核推广特征的"疑似�
 
 ## 文件结构
 
-| 文件 | 作用 | 状态 |
-|---|---|---|
-| `measure.py` | 核心计算 + 12 条自检 + CLI | 可运行 |
-| `PROTOCOL.md` | 口径 + 判定 + 效力条件 + 已知限度 | 完整 |
-| `intents.txt` | 20 个标准意图 | 就绪 |
-| `READINGS.md` | 空读数表 | 留空（无真实数据） |
-| `adapters/example_adapter.py` | 采集适配器契约（骨架，未接线） | 骨架 |
-| `tests/test_measure.py` | 单元测试（unittest） | 可运行 |
-| `examples/selftest_fixture.json` | 合成样例 payload | 合成，非真实读数 |
-| `docs/代码审核报告.md` | v2.0 代码审核（11 项发现） | 已完成 |
-| `CHANGELOG.md` | 版本变更 | — |
+| 文件                               | 作用                    | 状态        |
+| -------------------------------- | --------------------- | --------- |
+| `measure.py`                     | 核心计算 + 12 条自检 + CLI   | 可运行       |
+| `PROTOCOL.md`                    | 口径 + 判定 + 效力条件 + 已知限度 | 完整        |
+| `intents.txt`                    | 20 个标准意图              | 就绪        |
+| `READINGS.md`                    | 空读数表                  | 留空（无真实数据） |
+| `adapters/example_adapter.py`    | 采集适配器契约（骨架，未接线）       | 骨架        |
+| `tests/test_measure.py`          | 单元测试（unittest）        | 可运行       |
+| `tests/test_mutation.py`         | **变异测试**（自检有效性判据）    | 可运行       |
+| `examples/selftest_fixture.json` | 合成样例 payload          | 合成，非真实读数  |
+| `docs/代码审核报告.md`                 | v2.0 代码审核（11 项发现）     | 已完成       |
+| `docs/代码审核报告-v21定版.md`         | v2.1 定版代码审核（实机首跑 FAIL + 10 项） | 已完成 |
+| `docs/变异测试规范.md`               | **自检有效性判据（L0/L1/L2）** | 完整        |
+| `CHANGELOG.md`                   | 版本变更                  | —         |
 
 ---
 
@@ -85,11 +88,18 @@ python measure.py --input examples/selftest_fixture.json --output readings.json
 # 单元测试
 python -m unittest discover -s tests -v
 
+# ★ 变异测试：验证"自检真的在验机制"（拆掉被测机制 ⇒ 自检必须失败）
+#   规范见 docs/变异测试规范.md
+python -m unittest tests.test_mutation -v
+
 # 同口径独立复算比对（两个测量者各跑一份，再比）
 python measure.py --compare a.json b.json
 ```
 
 > CLI 同时接受 `--in/--out` 与 `--input/--output`。
+
+> ★ **本项目对"自检"的要求高于常规**：一条自检若在"把被测机制拆掉"之后仍然通过，
+> 它就是无效的。见 `docs/变异测试规范.md`。
 
 ---
 
@@ -97,11 +107,11 @@ python measure.py --compare a.json b.json
 
 一次合格读数**必须同时**给出：
 
-`openness_main` · `openness_strict` · `per_entry_openness` · `spread` ·
-`samples` · `intents` · `suspected_rate` · `uncomputable` · 口径指纹 ·
+`openness_main` · `openness_strict` · `per_entry_openness` · `spread` ·  
+`samples` · `intents` · `suspected_rate` · `uncomputable` · 口径指纹 ·  
 效力标签 · `unknown_relations`
 
-★ 只报一个总占比 ⇒ 该读数视为**不完整**，不得对外引用。
+★ 只报一个总占比 ⇒ 该读数视为**不完整**，不得对外引用。  
 ★ 任一入口无可用样本 ⇒ 记入 `entries_without_data`，不得静默省略。
 
 ---
@@ -110,13 +120,13 @@ python measure.py --compare a.json b.json
 
 payload 里的 `independence` 有三档，代码据此**自动给读数打效力标签**：
 
-| independence | 效力 | 是否参与聚合 |
-|---|---|---|
-| `none` | 读数可用 | ✅ |
-| `has_relation` | 参考（测量者与入口方有关系） | ✅（但仅作参考） |
-| `provided_by_entry` | **不算独立读数** | ❌ **代码直接排除，不参与任何聚合** |
+| independence        | 效力             | 是否参与聚合               |
+| ------------------- | -------------- | -------------------- |
+| `none`              | 读数可用           | ✅                    |
+| `has_relation`      | 参考（测量者与入口方有关系） | ✅（但仅作参考）             |
+| `provided_by_entry` | **不算独立读数**     | ❌ **代码直接排除，不参与任何聚合** |
 
-★ 谁想用入口方给的数据冒充独立读数，代码直接拒（v2.1 已真正实现，见 `excluded_from_aggregate`）。
+★ 谁想用入口方给的数据冒充独立读数，代码直接拒（v2.1 已真正实现，见 `excluded_from_aggregate`）。  
 ★ 本栏不得自填谎言：若事后发现声明不实，该测量者的全部读数作废。
 
 ---
@@ -139,7 +149,7 @@ python measure.py --compare a.json b.json
 
 ## 如何接入采集器（BYO Adapter）
 
-本仓库**不替你决定怎么采数**。你需自己实现 `fetch_candidates`，并承担合规责任。
+本仓库**不替你决定怎么采数**。你需自己实现 `fetch_candidates`，并承担合规责任。  
 契约见 `adapters/example_adapter.py`。
 
 **禁止提交到本仓库的内容：**
@@ -171,7 +181,7 @@ python measure.py --compare a.json b.json
 - 公开点名可能构成名誉侵权、商业诋毁、不正当竞争；
 - 用于做空、市场操纵可能触及证券法。
 
-**公开点名平台前，请务必：** ① 咨询法律意见；② 保留原始快照和规则版本；
+**公开点名平台前，请务必：** ① 咨询法律意见；② 保留原始快照和规则版本；  
 ③ 给平台回应权；④ 附方法论、采样条件、限度说明；⑤ 避免商业攻击和人身攻击。
 
 **本仓库作者不提供法律建议，不对任何实践者的采集、判定、公开行为负责。**
@@ -204,7 +214,7 @@ python measure.py --compare a.json b.json
 
 ## 许可证
 
-**MIT License**（见 `LICENSE`）。**许可证不能免除采集、判定、公开行为带来的法律风险。**
+**MIT License**（见 `LICENSE`）。**许可证不能免除采集、判定、公开行为带来的法律风险。**  
 发布前请把 `LICENSE` 中的版权人替换为你的实际署名。
 
 ---

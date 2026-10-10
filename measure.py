@@ -55,6 +55,11 @@ EFFECT_TEXT = {
     "provided_by_entry": "不算独立读数",
 }
 
+# ★ compare 的完整性必报项 (PROTOCOL §5 报数纪律)。缺任一 ⇒ 判不完整,不得引用。
+REQUIRED_FIELDS = ("openness_main", "openness_strict", "per_entry_openness",
+                   "spread", "samples", "intents", "suspected_rate",
+                   "caliber_fingerprint")
+
 CALIBER = {
     "protocol_version": PROTOCOL_VERSION,
     "logic_revision": "r2",          # ★ 逻辑修订号: 改计算逻辑必须动它
@@ -119,7 +124,11 @@ def compute(payload):
     if indep not in INDEPENDENCE_MODES:
         indep = "none"
     effect = EFFECT_TEXT[indep]
+    # ★ 只有 provided_by_entry 才被排除聚合; has_relation 是"可用但降级为参考"。
+    in_aggregate = not (indep == "provided_by_entry")
     independent_reading = (indep == "none")
+    # ★ 自证数据必须显式标出(闸门位, 不是影子)
+    suppressed = (indep == "provided_by_entry")
 
     counts = {"total": 0, "independent": 0, "suspected": 0, "main_n": 0, "strict_n": 0}
     unknown_values = set()
@@ -137,15 +146,15 @@ def compute(payload):
             uncomputable += 1
             no_data.append({"entry": entry, "intent": intent})
             rows.append({"entry": entry, "intent": intent, "result": None,
-                         "in_aggregate": independent_reading,
+                         "in_aggregate": in_aggregate,
                          "note": "uncomputable(空样本,不猜)"})
             continue
 
         intents.add(intent)
         row = {"entry": entry, "intent": intent,
-               "in_aggregate": independent_reading, "result": r}
+               "in_aggregate": in_aggregate, "result": r}
 
-        if not independent_reading:
+        if not in_aggregate:
             row["note"] = f"排除聚合(效力:{effect})"
             excluded.append({"entry": entry, "intent": intent, "result": r})
             rows.append(row)
@@ -186,8 +195,10 @@ def compute(payload):
                      "已按非开放保守计入,请核对词表")
     if no_data:
         flags.append(f"{len(no_data)} 个入口无可用样本,未计入 per_entry")
-    if not independent_reading:
+    if not in_aggregate:
         flags.append(f"独立性:{effect} —— 该读数不参与聚合")
+    elif not independent_reading:
+        flags.append(f"独立性:{effect} —— 该读数仅供参考,不得单独对外引用")
 
     caliber_fp = _caliber_fingerprint()
     result = {
@@ -198,6 +209,7 @@ def compute(payload):
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "independence": indep,
         "effect": effect,
+        "suppressed": suppressed,
         # —— 头条指标: 主口径 (README 定义)。overall 为向后兼容别名, 与 main 同值。
         "openness_main": openness_main,
         "openness_overall": openness_main,
@@ -247,21 +259,34 @@ def _load(path):
 
 
 def compare(a_path, b_path):
-    """同口径独立复算比对 (只接受独立读数)。"""
+    """同口径独立复算比对 (只接受完整、独立的读数)。
+
+    ★ 完整性按 PROTOCOL §5 报数纪律执行: 必报项一个都不许缺。
+      单入口读数 spread 为 None ⇒ 判为不完整, 不得比对 (不再豁免)。
+    """
     a, b = _load(a_path), _load(b_path)
     if a.get("caliber_fingerprint") != b.get("caliber_fingerprint"):
         return {"comparable": False,
                 "reason": "口径指纹不同,不可比对(请先统一口径)"}
     for name, r in (("a", a), ("b", b)):
+        if r.get("suppressed"):
+            return {"comparable": False,
+                    "reason": f"读数 {name} 为自证数据(不出数),不是独立读数,不可比对"}
         if r.get("independence", "none") != "none":
             return {"comparable": False,
                     "reason": f"读数 {name} 效力为「{r.get('effect')}」,"
                               "不是独立读数,不作一致性比对"}
+        missing = [f for f in REQUIRED_FIELDS if r.get(f) is None]
+        if missing:
+            return {"comparable": False,
+                    "reason": f"读数 {name} 不完整(缺 {missing}),不得引用"}
     out = {
         "comparable": True,
         "a_main": a.get("openness_main"), "b_main": b.get("openness_main"),
         "a_strict": a.get("openness_strict"), "b_strict": b.get("openness_strict"),
         "a_spread": a.get("spread"), "b_spread": b.get("spread"),
+        "a_per_entry": a.get("per_entry_openness"),
+        "b_per_entry": b.get("per_entry_openness"),
         "a_fingerprint": a.get("reading_fingerprint"),
         "b_fingerprint": b.get("reading_fingerprint"),
     }
