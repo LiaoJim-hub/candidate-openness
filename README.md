@@ -80,7 +80,7 @@ suspected    = 无付费标注、但具备可外部复核推广特征的"疑似�
 
 ```bash
 git clone <repo-url>
-cd candidate_openness
+cd candidate-openness        # ★ 目录名由**仓库名**决定；本机那份文件夹叫什么是另一回事
 
 # 运行自检（只验证代码逻辑，不代表任何真实平台读数）
 python measure.py --selftest
