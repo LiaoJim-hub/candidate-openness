@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 本地临时/审计工作区（不提交）
+_tmp/
+*.log
+
+# 生成的读数（用户自己的数据，不提交）
+readings.json
+*.reading.json
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store

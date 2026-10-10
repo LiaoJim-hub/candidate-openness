@@ -1,0 +1,29 @@
+{
+  "_note": "SYNTHETIC FIXTURE — 合成样例，非任何平台真实读数，不得引用为证据。",
+  "taken_at": "2026-10-10T00:00:00Z",
+  "independence": "none",
+  "entries": [
+    {
+      "entry": "入口A(合成)",
+      "intent": "通勤鞋",
+      "items": [
+        {"relation": "independent", "id": "a1", "evidence": []},
+        {"relation": "independent", "id": "a2", "evidence": []},
+        {"relation": "marked_paid", "id": "a3", "evidence": []},
+        {"relation": "affiliate", "id": "a4", "evidence": []},
+        {"relation": "suspected_paid", "id": "a5", "evidence": ["落地页带投放参数"]},
+        {"relation": "independent", "id": "a6", "evidence": []}
+      ]
+    },
+    {
+      "entry": "入口B(合成)",
+      "intent": "通勤鞋",
+      "items": [
+        {"relation": "independent", "id": "b1", "evidence": []},
+        {"relation": "self", "id": "b2", "evidence": []},
+        {"relation": "marked_paid", "id": "b3", "evidence": []},
+        {"relation": "independent", "id": "b4", "evidence": []}
+      ]
+    }
+  ]
+}
