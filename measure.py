@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 候选集开放度 · 尺子  (Candidate Openness)
-协议口径: v2.1    ·    代码版本: 2.1.0
+协议口径: v2.1    ·    代码版本: 2.1.1
 
 一句话: 量"同一个购买意图下, 入口直接给出的候选中, 非付费位、非关联方的占比"。
 
@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 # 常量  (★ 凡进入 CALIBER 的, 改它就等于改口径, 必须升协议版本)
 # ----------------------------------------------------------------------
 PROTOCOL_VERSION = "v2.1"
-CODE_VERSION = "2.1.0"
+CODE_VERSION = "2.1.1"
 
 MIN_SAMPLES = 40            # 20 意图 x 至少 2 入口; 工程默认值, 无实测依据
 MIN_INTENTS = 20
