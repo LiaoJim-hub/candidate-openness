@@ -89,7 +89,8 @@
   （此前 CHANGELOG 已到 v2.1.1，代码与 README 未同步）。
 - **审核证据归档**：两轮探测脚本移入 `docs/审核证据/`（含 `probe-v20.py`、
   `probe-v21.py`、`mutation.py`、`rate_selftests.py`、`probe11.py`）并附 README。
-- **README 文件结构表**补齐 `docs/发布前清单.md`、`docs/审核证据/`、`docs/原始素材/`。
+- **README 文件结构表**补齐 `docs/发布前清单.md`、`docs/审核证据/`、`docs/原始素材/`
+  （★ `docs/原始素材/` 是**过程件** ⇒ **发布时已移出本仓**，见 v2.2 后那条）。
 
 ### ⛔ 未解决（发布阻断项，需作者决策）
 
