@@ -32,13 +32,18 @@ class TestMeasure(unittest.TestCase):
         self.assertEqual(r["openness_strict"], 0.5)
 
     def test_main_vs_strict(self):
-        # 疑似计入主口径分子, 不进严格口径
+        # ★★ 2026-10-10 改（持有方定义判）：疑似**单列** —— 不进分子、**也不进分母**。
+        #   ★ 故 1 独立 + 1 疑似 ⇒ 分母 = 1（只含观测到的）· 分子 = 1 ⇒ 主/严格**都 = 1.0**
+        #   ★ 而"疑似那个量"由 `suspected_paid` / `suspected_rate` **单列报出** ⇒
+        #     只报一个 `openness_main` = **不完整读数**（本仓 README「报数纪律」）。
         r = M.compute({**BASE, "entries": [{"entry": "A", "intent": "x", "items": [
             {"relation": "suspected_paid"}, {"relation": "independent"}]}]})
         self.assertEqual(r["openness_main"], 1.0)
-        self.assertEqual(r["openness_strict"], 0.5)
+        self.assertEqual(r["openness_strict"], 1.0)
         self.assertEqual(r["openness_overall"], r["openness_main"])  # 别名
         self.assertEqual(r["suspected_paid"], 1)
+        self.assertEqual(r["suspected_rate"], 0.5)          # ★ 那个量必须同时报
+        self.assertEqual(r["samples"], 2)                    # ★ 样本量仍含疑似（它没被丢掉）
 
     def test_empty_is_uncomputable(self):
         r = M.compute({**BASE, "entries": [{"entry": "A", "intent": "y", "items": []}]})
@@ -47,11 +52,25 @@ class TestMeasure(unittest.TestCase):
         self.assertTrue(r["entries_without_data"])
 
     def test_unknown_relation_flagged(self):
+        # ★★ 2026-10-10 改：未知**超限即不可核**（持有方定义判）。
+        #   ★ 故用"未超限"的样本（4 已知 + 1 未知 = 恰 20%）验"词表照报"；
+        #   ★ 而"超限"那一路另有一条测试（test_unknown_over_limit_uncomputable）。
         r = M.compute({**BASE, "entries": [{"entry": "A", "intent": "z", "items": [
-            {"relation": "independent"}, {"relation": "mystery"}]}]})
-        self.assertEqual(r["openness_main"], 0.5)           # 保守(未知不计分子)
+            {"relation": "independent"}] * 4 + [{"relation": "mystery"}]}]})
+        self.assertEqual(r["uncomputable"], 0)
+        # ★ 分母只含观测到的 ⇒ 4/4 = 1.0（未知不进分母，与疑似同待遇）
+        self.assertEqual(r["openness_main"], 1.0)
         self.assertEqual(r["unknown_relations"], ["mystery"])
         self.assertTrue(any("未识别" in f for f in r["flags"]))
+
+    def test_unknown_over_limit_uncomputable(self):
+        # ★★ 2026-10-10 加：★ 未知占比超 `UNKNOWN_MAX`(0.2) ⇒ **该入口整体不可核**
+        r = M.compute({**BASE, "entries": [{"entry": "A", "intent": "z0", "items": [
+            {"relation": "independent"}, {"relation": "mystery"}]}]})
+        self.assertEqual(r["uncomputable"], 1)
+        self.assertIsNone(r["openness_main"])
+        # ★ 而**不可核那一路也必须交未知词表**（否则拼错的 relation 反而看不见）
+        self.assertEqual(r["unknown_relations"], ["mystery"])
 
     def test_spread_polar_vs_uniform(self):
         r = M.compute({**BASE, "entries": [

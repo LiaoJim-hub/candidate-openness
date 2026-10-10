@@ -2,7 +2,7 @@
 
 > 一把量"入口选择权"的尺子。  
 > **状态：可运行原型 + 完整协议 + 空采集接口。无真实数据。不内置爬虫。**  
-> 协议口径 **v2.1** ｜ 代码版本 **2.1.1**
+> 协议口径 **v2.2** ｜ 代码版本 **2.1.1**
 
 ---
 
@@ -18,26 +18,44 @@
 
 ---
 
-## 三个数，一起报（v2.1）
+## 三个数，一起报（v2.2）
 
 ```text
 N            = 入口直接给出的候选总数（不含追问后结果）
+observed     = 只含「观测到」的候选 = independent + marked_paid + 关联方
 independent  = 既非付费标注位、也非关联方的候选
-suspected    = 无付费标注、但具备可外部复核推广特征的"疑似付费位"
+suspected    = 无付费标注、但具备可外部复核推广特征的「疑似付费位」  ← 推定，不是观测
+unknown      = 无法归类（relation 值不在词表内，或拼错）
 
-主口径   openness_main   = (independent + suspected) / N   ★ 头条指标
-严格口径 openness_strict =  independent            / N
-疑似率   suspected_rate  =  suspected              / N
+主口径   openness_main   = independent / observed        ★ 头条指标
+严格口径 openness_strict = independent / observed        （v2.2 起与主口径同值，见下）
+疑似率   suspected_rate  = suspected   / N
+未知率   unknown_rate    = unknown     / N
 极差     spread          = 各入口 openness_main 的 max − min
 ```
 
-- **主口径**：只剔除"入口标注的付费位"与"关联方"；疑似位仍计入分子（它没有付费标注）。  
-  这对应 README 的一句话定义：*非关联候选 = 既非付费位，也非关联方*。
-- **严格口径**：在主口径基础上**再**扣除疑似付费位。
-- **疑似付费位单独列出**，不并入严格口径分子；默认也不从分母剔除。
+- **★ v2.2 起：这个数只量「已证事实」。** `observed` **只含观测到的三类**
+  （`independent` / `marked_paid` / `关联方`）—— **`suspected` 与 `unknown` 都不进分子、也不进分母。**
+- **★ 为什么（不是偏好，是判据）**：`suspected` 是**推定**（无标注 + 旁证），不是观测。
+  把它**并入分子**＝把不确定读成"最好"；把它**并入分母**＝把不确定读成"最坏"。
+  **两者是同一个错**：*让不确定进入一个确定的数*。⇒ **故它单列。**
+- **★ 故 `openness_main` 高 ≠ 开放度高**：若某入口大量候选是「疑似」，
+  分母会缩水、这个数会偏高。**必须同时看 `suspected_rate` 与 `unknown_rate`。**
+- **疑似率 / 未知率单列报出**，读者自己判断"疑到什么程度算数"。
+
+### ★ 两道闸门（v2.2 加）
+
+| 闸门 | 判据 | 后果 |
+|---|---|---|
+| **未知过多** | `unknown / N > UNKNOWN_MAX`（**0.2**） | 该入口**不可核**（不报数） |
+| **疑似过多** | `suspected / N > SUSPECTED_MAX`（**0.5**） | 该入口**不可核**（不报数） |
+
+★ **方向是「过多 ⇒ 不可核」，不是「存在 ⇒ 不可核」。**
+理由：「疑似」太多说明这个入口的**判定依据整体不足** ⇒ 它整体不可核，而不是"部分可核"；
+★ 而若改成"存在即不可核"，这两道闸门就会**从"防误读"变成"防观测"** —— 比误读更坏。
 
 > ⚠️ 只报一个 `openness_main` 是**不完整读数**。必须同时报 `openness_strict`、`spread`、  
-> `samples`、`suspected_rate`、`uncomputable`、口径指纹与效力标签（见下"报数纪律"）。
+> `samples`、`suspected_rate`、`unknown_rate`、`uncomputable`、口径指纹与效力标签（见下"报数纪律"）。
 
 **为什么 `spread` 必须报**：`openness_main = 0.4` 有两种完全不同的情况——  
 四个入口都是 0.4（**均匀**，像行业通病），还是一个 0.8 一个 0.0（**两极**，像某家在干）。  
@@ -106,16 +124,18 @@ python measure.py --compare a.json b.json
 
 ---
 
-## 报数纪律（v2.1）
+## 报数纪律（v2.2）
 
 一次合格读数**必须同时**给出：
 
 `openness_main` · `openness_strict` · `per_entry_openness` · `spread` ·  
-`samples` · `intents` · `suspected_rate` · `uncomputable` · 口径指纹 ·  
+`samples` · `intents` · **`suspected_rate`** · **`unknown_rate`** · `uncomputable` · 口径指纹 ·  
 效力标签 · `unknown_relations`
 
 ★ 只报一个总占比 ⇒ 该读数视为**不完整**，不得对外引用。  
-★ 任一入口无可用样本 ⇒ 记入 `entries_without_data`，不得静默省略。
+★★ **v2.2 起尤其如此**：`openness_main` 的**分母只含观测到的** ⇒ ★ **不必报 `suspected_rate` 与
+`unknown_rate`，读者会把这个数读得比实际更可信**（★ 那是本尺子最想防的误读）。  
+★ 任一入口无可用样本、或被判不可核 ⇒ 记入 `entries_without_data`（含**为什么**），不得静默省略。
 
 ---
 
@@ -129,7 +149,7 @@ payload 里的 `independence` 有三档，代码据此**自动给读数打效力
 | `has_relation`      | 参考（测量者与入口方有关系） | ✅（但仅作参考）             |
 | `provided_by_entry` | **不算独立读数**     | ❌ **代码直接排除，不参与任何聚合** |
 
-★ 谁想用入口方给的数据冒充独立读数，代码直接拒（v2.1 已真正实现，见 `excluded_from_aggregate`）。  
+★ 谁想用入口方给的数据冒充独立读数，代码直接拒（v2.1 已真正实现 · v2.2 仍拒，见 `excluded_from_aggregate`）。  
 ★ 本栏不得自填谎言：若事后发现声明不实，该测量者的全部读数作废。
 
 ---
@@ -231,7 +251,7 @@ python measure.py --compare a.json b.json
 
 如果你在研究、报道、审计中使用本工具，请引用：
 
-> 候选集开放度 · Candidate Openness，版本 2.1.1（协议口径 v2.1），仓库地址。
+> 候选集开放度 · Candidate Openness，版本 2.1.1（协议口径 v2.2），仓库地址。
 
 并附上采样条件、规则版本、原始快照和限度说明。
 

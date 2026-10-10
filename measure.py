@@ -28,13 +28,28 @@ from datetime import datetime, timezone
 # ----------------------------------------------------------------------
 # 常量  (★ 凡进入 CALIBER 的, 改它就等于改口径, 必须升协议版本)
 # ----------------------------------------------------------------------
-PROTOCOL_VERSION = "v2.1"
+PROTOCOL_VERSION = "v2.2"      # ★ 2026-10-10：口径变更（疑似单列）⇒ 必须升协议版本
 CODE_VERSION = "2.1.1"
 
 MIN_SAMPLES = 40            # 20 意图 x 至少 2 入口; 工程默认值, 无实测依据
 MIN_INTENTS = 20
 SUSPECTED_RATE_WARN = 0.3   # 疑似率提示线
 CONSISTENCY_TOL = 0.05      # 同口径复算一致阈值; 工程默认值, 无实测依据
+
+# ★★★★ 2026-10-10 加（★ 持有方定义判：「疑似付费位」单列 + 超阈不可核）：
+#   ★ 判词逐字：★「★ **它既不该进分子，也不该简单进分母** —— **应该单列成一个独立出口**」
+#      ★ 理由：★「★ **把"不知道"渲染成一个具体的归属，就是做假读数**」——
+#      ★★ 而**进分子**是把不确定读成"最好"、★ **进分母**是读成"最坏"，★ **两个都是同一个错。**
+#   ★★ 故本尺子的 `openness_*` **只量"已证事实"**：
+#      · 分母（observed）= independent + marked_paid + 关联方  ← ★ **只含观测到的**
+#      · 分子           = independent
+#      · suspected_paid = **单列输出**，★ 不进分子、★ **不进分母**、★ 不参与 overall
+#   ★★★ 而**单列必须配闸门**（★ 否则它成了"逃避选择"）：
+#      ★「★ **疑似太多，说明这个入口的判定依据整体不足 ⇒ 它整体不可核，而不是"部分可核"**」
+#   ★★★★ 阈值方向（★ 持有方特别点名，★ 我照抄）：★ **是「疑似过多 ⇒ 不可核」，
+#      不是「疑似存在 ⇒ 不可核」** —— ★★ **否则它会从"防误读"变成"防观测"。**
+UNKNOWN_MAX = 0.2           # 未知(无法归类)占比上限; 超 ⇒ 该入口不可核
+SUSPECTED_MAX = 0.5         # 疑似占比上限; 超 ⇒ 该入口不可核(★ 「过多」不是「存在」)
 
 # relation -> 归类。★ 这张表参与口径指纹。
 RELATION_MAP = {
@@ -62,12 +77,17 @@ REQUIRED_FIELDS = ("openness_main", "openness_strict", "per_entry_openness",
 
 CALIBER = {
     "protocol_version": PROTOCOL_VERSION,
-    "logic_revision": "r2",          # ★ 逻辑修订号: 改计算逻辑必须动它
+    "logic_revision": "r3",          # ★ 逻辑修订号: 改计算逻辑必须动它（r3 = 疑似单列）
     "min_samples": MIN_SAMPLES,
     "min_intents": MIN_INTENTS,
     "suspected_warn": SUSPECTED_RATE_WARN,
     "consistency_tol": CONSISTENCY_TOL,
     "relation_map": RELATION_MAP,    # ★ 归类表进指纹
+    # ★★★ 2026-10-10：口径变了 ⇒ 这两条必须进指纹（★ 否则改了归一化而指纹不变）
+    "unknown_max": UNKNOWN_MAX,
+    "suspected_max": SUSPECTED_MAX,
+    "observed_denominator": ("independent", "paid", "related"),   # ★ 分母只含观测到的
+    "suspected_in": "single",        # ★ 疑似：单列（★ 既不入分子、也不入分母）
 }
 
 
@@ -100,19 +120,46 @@ def _rate(items):
         c[cat] += 1
         if cat == "unknown":
             unknown_rels.append(rel)
+    # ★★★★ 2026-10-10（★ 持有方定义判）：★ 疑似**单列** —— 不进分子、**也不进分母**。
+    #   ★ 分母 = **只含观测到的**（independent + paid + related）· ★ 分子 = independent
+    observed = c["independent"] + c["paid"] + c["related"]
+    sus = c["suspected"]
+    unk = c["unknown"]
+    # ★★★★ **未知词表在任何 return 之前就算好**（★ 2026-10-10 修的一处真缺陷）：
+    #   ★ 起因：★ 我原来只在**最后一个** return 里带它 ⇒ ★★ 而"未知超限"那条**早退**不带 ⇒
+    #   ★★★ **于是"拼错的 relation"恰恰在**被拒的那一路**看不见** —— ★★ 而那正好倒过来**
+    #   （★ 越是不认识的词多，★ 越该把它报出来）。
+    _unk_words = sorted({x for x in unknown_rels if x is not None}, key=str)
+
+    # ★★★ 闸门（★ 持有方逐字：「★ 疑似太多 ⇒ 该入口整体不可核，而不是"部分可核"」）
+    #   ★★ 而**方向必须是"过多"**（★ 不是"存在"）—— ★ 否则它会从"防误读"变成"防观测"。
+    if observed == 0:
+        return {"total": total, "observed": 0, "suspected": sus, "unknown": unk,
+                "uncomputable": True,
+                "unknown_relations": _unk_words,
+                "note": "该入口没有可判定样本（全是未知/疑似）⇒ 不报数"}
+    if unk / total > UNKNOWN_MAX:
+        return {"total": total, "observed": observed, "suspected": sus, "unknown": unk,
+                "uncomputable": True,
+                "unknown_relations": _unk_words,
+                "note": f"未知占比 {unk}/{total} 超上限 {UNKNOWN_MAX} ⇒ 判不可核(不报数)"}
+    if sus / total > SUSPECTED_MAX:
+        return {"total": total, "observed": observed, "suspected": sus, "unknown": unk,
+                "uncomputable": True,
+                "unknown_relations": _unk_words,
+                "note": f"疑似占比 {sus}/{total} 超上限 {SUSPECTED_MAX} ⇒ "
+                        "该入口判定依据整体不足,判不可核(不报数)"}
     return {
         "total": total,
+        "observed": observed,            # ★ 分母（只含观测到的）
         "independent": c["independent"],
         "paid": c["paid"],
         "related": c["related"],
-        "suspected": c["suspected"],
-        "unknown": c["unknown"],
-        # 主口径: 既非付费标注位, 也非关联方 (疑似计入分子)
-        "main_n": c["independent"] + c["suspected"],
-        # 严格口径: 再扣除疑似
-        "strict_n": c["independent"],
-        "unknown_relations": sorted({x for x in unknown_rels if x is not None},
-                                    key=str),
+        "suspected": sus,                # ★ 单列（不进分子、不进分母）
+        "unknown": unk,
+        "main_n": c["independent"],      # ★ 分子 = independent
+        "strict_n": c["independent"],    # ★ 严格口径与主口径同（疑似已不在分母里）
+        "unknown_relations": _unk_words,
     }
 
 
@@ -130,7 +177,11 @@ def compute(payload):
     # ★ 自证数据必须显式标出(闸门位, 不是影子)
     suppressed = (indep == "provided_by_entry")
 
-    counts = {"total": 0, "independent": 0, "suspected": 0, "main_n": 0, "strict_n": 0}
+    # ★ 2026-10-10：★ `total` 仍在（样本量）· ★ 而**分母换成 `observed`**（★ 疑似的量另记）
+    #   ★★ 而 `unknown` 也必须累（★ 否则 `unknown_rate` 算不出来 —— 我第一版就栽在这：
+    #      ★ 它从 `rows` 求和，★ 而那句跑在**装 `rows` 之前** ⇒ 恒 `None`）。
+    counts = {"total": 0, "observed": 0, "independent": 0, "suspected": 0,
+              "unknown": 0, "main_n": 0, "strict_n": 0}
     unknown_values = set()
     rows, excluded, no_data = [], [], []
     per_entry = {}
@@ -142,12 +193,19 @@ def compute(payload):
         intent = _norm_intent(e.get("intent", ""))
         r = _rate(e.get("items", []))
 
-        if r is None:
+        # ★★★ 2026-10-10：★ 空样本与"未知/疑似超限"**同档**（★ 持有方：「整体不可核，不是部分可核」）
+        if r is None or r.get("uncomputable"):
             uncomputable += 1
-            no_data.append({"entry": entry, "intent": intent})
+            # ★★★ 而**不可核那一路也必须交未知词表** —— ★ 否则"这批样本里有拼错的 relation"
+            #   这件事**只在能算出数时才报**，★ 而超限被拒的那一路**反而看不见它**（★ 那正好倒过来）。
+            if r is not None:
+                unknown_values.update(r.get("unknown_relations") or [])
+            no_data.append({"entry": entry, "intent": intent,
+                            "why": "空样本" if r is None else r.get("note")})
             rows.append({"entry": entry, "intent": intent, "result": None,
                          "in_aggregate": in_aggregate,
-                         "note": "uncomputable(空样本,不猜)"})
+                         "note": "uncomputable(空样本,不猜)" if r is None
+                                 else "uncomputable({0})".format(r.get("note"))})
             continue
 
         intents.add(intent)
@@ -176,12 +234,18 @@ def compute(payload):
     spread = (round(max(per_entry_main.values()) - min(per_entry_main.values()), 4)
               if len(per_entry_main) >= 2 else None)
 
-    openness_main = (round(counts["main_n"] / counts["total"], 4)
-                     if counts["total"] else None)
-    openness_strict = (round(counts["strict_n"] / counts["total"], 4)
-                       if counts["total"] else None)
+    # ★★★ 2026-10-10：★ 分母 = **observed**（只含观测到的）—— ★ 疑似**不进分母**
+    openness_main = (round(counts["main_n"] / counts["observed"], 4)
+                     if counts["observed"] else None)
+    openness_strict = (round(counts["strict_n"] / counts["observed"], 4)
+                       if counts["observed"] else None)
+    # ★ 疑似率与未知率：★ 都以**样本量**为分母（★ 它们量的是"这批样本里有多少没定论"）
+    #   ★★ 而**两者都从 `counts` 取**（★ 不从 `rows` 求和 —— ★ 那句跑在装 `rows` 之前，会恒 `None`；
+    #      ★ 而我第一版正是那样写的，★ 端到端跑样例时被照出来：`unknown_rate = None`）。
     suspected_rate = (round(counts["suspected"] / counts["total"], 4)
                       if counts["total"] else None)
+    unknown_rate = (round(counts["unknown"] / counts["total"], 4)
+                    if counts["total"] else None)
 
     flags = []
     if counts["total"] < MIN_SAMPLES:
@@ -221,6 +285,11 @@ def compute(payload):
         "intents": len(intents),
         "suspected_paid": counts["suspected"],
         "suspected_rate": suspected_rate,
+        # ★★★ 2026-10-10：★ `unknown_rate` **必须与 `suspected_rate` 并列报出**。
+        #   ★ 我第一版算了它却**忘了写进这个字典** ⇒ ★★ 端到端一跑就是 `None`
+        #   （★ 而三套测试**全过** —— ★ 因为**没有一条测试读这个字段**）。
+        #   ★★★ 故补上它，★ 并在自检里加一条「两个率必须都在」⇒ ★ 下次漏了会红。
+        "unknown_rate": unknown_rate,
         "unknown_relations": sorted(unknown_values, key=str),
         "uncomputable": uncomputable,
         "entries_without_data": no_data,
@@ -320,21 +389,51 @@ def _selftest():
         {"relation": "affiliate"}, {"relation": "independent"}]}]})
     chk(1, r["openness_main"] == 0.5 and r["openness_strict"] == 0.5, r["openness_main"])
 
-    # 2 ★ 主/严格并列: 疑似计入主口径分子, 不进严格口径
+    # 2 ★★ 2026-10-10 改（★ 持有方定义判）：★ 疑似**单列** —— 不进分子、**也不进分母**
+    #   ★ 故本条现在验的是那件事：★ `independent` 1 个、★ `suspected` 1 个
+    #     ⇒ ★ **分母 = 1**（只含观测到的）· ★ **分子 = 1** ⇒ ★ `openness_main = 1.0`
+    #     · ★ 而 `suspected_paid = 1` **单列** ⇒ ★ **读者必须同时看这两个数**（★ 只报一个 = 不完整读数）
     r = compute({**base, "entries": [{"entry": "A", "intent": "x", "items": [
         {"relation": "suspected_paid"}, {"relation": "independent"}]}]})
     chk(2, r["suspected_paid"] == 1 and r["openness_main"] == 1.0
-        and r["openness_strict"] == 0.5, (r["openness_main"], r["openness_strict"]))
+        and r["openness_strict"] == 1.0 and r["suspected_rate"] == 0.5,
+        (r["openness_main"], r["openness_strict"], r["suspected_rate"]))
 
     # 3 空样本不可核
     r = compute({**base, "entries": [{"entry": "A", "intent": "y", "items": []}]})
     chk(3, r["uncomputable"] == 1 and r["openness_main"] is None, r)
 
-    # 4 ★ 未知 relation 保守 + 告警
+    # 4 ★★ 2026-10-10 改：★ 未知**超限即不可核**（★ 持有方：「整体不可核，不是部分可核」）
+    #   ★ 1 已知 + 1 未知 ⇒ ★ 未知占 50% > `UNKNOWN_MAX`(0.2) ⇒ ★ **该入口不报数**
     r = compute({**base, "entries": [{"entry": "A", "intent": "z", "items": [
         {"relation": "independent"}, {"relation": "mystery"}]}]})
-    chk(4, r["openness_main"] == 0.5 and r["unknown_relations"] == ["mystery"]
-        and any("未识别" in f for f in r["flags"]), r["flags"])
+    chk(4, r["uncomputable"] == 1 and r["openness_main"] is None
+        and r["unknown_relations"] == ["mystery"], (r["uncomputable"], r["openness_main"]))
+
+    # 4b ★★★ 未知**未超限** ⇒ 照出数（★ 证明闸门是"过多"而**不是"存在"**）
+    #   ★ 4 已知 + 1 未知 ⇒ ★ 未知恰 20% · ★ 判据是 `>` ⇒ **不触发** ⇒ ★ 出数
+    #   ★★★ 而**出的是 `1.0` 不是 `0.8`** —— ★ 因为**分母只含观测到的**（★ 那 4 个 independent）
+    #      ⇒ ★★ **未知与疑似一样，都不进分母**（★ 持有方定义：★ `overall` **只量已证事实**）
+    #      ⇒ ★★★ **故凡用到本数，★ 必须同时看 `suspected_rate` 与 `unknown_rate`**（★ 只报一个 = 不完整读数）
+    r = compute({**base, "entries": [{"entry": "A", "intent": "z2", "items": [
+        {"relation": "independent"}] * 4 + [{"relation": "mystery"}]}]})
+    chk("4b", r["uncomputable"] == 0 and r["openness_main"] == 1.0
+        and r["unknown_relations"] == ["mystery"] and r["unknown_rate"] == 0.2,
+        (r["uncomputable"], r["openness_main"], r["unknown_relations"], r["unknown_rate"]))
+    # 4b2 ★★★★ 「两个率必须都在」—— ★ 我第一版算了 `unknown_rate` 却**没写进输出字典**，
+    #   而三套测试全过（★ 因为没有一条读它）⇒ ★ **这条断言就是为那次漏而加的。**
+    chk("4b2", "unknown_rate" in r and "suspected_rate" in r
+        and r["unknown_rate"] is not None and r["suspected_rate"] is not None,
+        (r.get("unknown_rate"), r.get("suspected_rate")))
+
+    # 4c ★★★ 疑似**过多** ⇒ 不可核（★ 而那正是"防误读"而不是"防观测"）
+    #   ★ 观测到 2 个 · ★ 疑似 3 个 ⇒ ★ 疑似占 60% > `SUSPECTED_MAX`(0.5) ⇒ **不可核**
+    #   ★★ 而 `chk(2)` 那组（疑似 1 / 观测 1 = 50%）**不触发** ——
+    #      ★ 因为判据是「**过多**」而不是「**存在**」（★ 持有方逐字点名了这一条）。
+    r = compute({**base, "entries": [{"entry": "A", "intent": "z3", "items": [
+        {"relation": "independent"}] * 2 + [{"relation": "suspected_paid"}] * 3}]})
+    chk("4c", r["uncomputable"] == 1 and r["openness_main"] is None,
+        (r["uncomputable"], r["openness_main"]))
 
     # 5 ★ 分布: 两极 vs 均匀
     r = compute({**base, "entries": [
