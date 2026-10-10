@@ -19,8 +19,10 @@
 1. **口径分歧**：本仓库与用户 v2.1 定版对同一数据给出不同的数——
    `suspected_paid` 归属（分子 vs 分母）、`unknown` 处理（保守计入 vs 超限不可核）。
    **两套"同名不同口径"的尺子不得同时发布。**
-2. **许可署名**：`LICENSE` 版权人与 git user 仍为占位符。
-3. **未建远程仓库**：`git remote` 为空。
+2. ~~**许可署名**：`LICENSE` 版权人与 git user 仍为占位符。~~
+   → **已解决（2026-10-10）**：`LICENSE` 版权人署 **NanshanJim**；
+   git 提交身份为 **NanshanJim** + GitHub noreply（提交历史已一并重写）。
+3. **未建远程仓库**：`git remote` 为空（待作者给仓库名与可见性）。
 
 ---
 

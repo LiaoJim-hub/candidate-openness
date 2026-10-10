@@ -218,7 +218,12 @@ python measure.py --compare a.json b.json
 ## 许可证
 
 **MIT License**（见 `LICENSE`）。**许可证不能免除采集、判定、公开行为带来的法律风险。**  
-发布前请把 `LICENSE` 中的版权人替换为你的实际署名。
+版权人：**NanshanJim**（`LICENSE` 第 3 行已署实际署名）。
+
+> ★ **本项目**刻意分开两个邮箱**，★ 请按用途选：
+> - **联系与回应权**（★ 平台异议 · ★ 研究者复算 · ★ 法律通知 · ★ 纠错）⇒ **NanshanJim@Outlook.com**
+> - **提交邮箱**（★ `git log` 里那个）⇒ ★ 用 **GitHub 的 noreply**（★ `…@users.noreply.github.com`）——
+>   ★★ 因为**提交历史是永久公开且不可撤回的**，★ 不该把常驻邮箱写进去。
 
 ---
 
