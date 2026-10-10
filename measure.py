@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 候选集开放度 · 尺子  (Candidate Openness)
-协议口径: v2.1    ·    代码版本: 2.1.1
+协议口径: v2.2    ·    代码版本: 2.2.0
 
 一句话: 量"同一个购买意图下, 入口直接给出的候选中, 非付费位、非关联方的占比"。
 
@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 # 常量  (★ 凡进入 CALIBER 的, 改它就等于改口径, 必须升协议版本)
 # ----------------------------------------------------------------------
 PROTOCOL_VERSION = "v2.2"      # ★ 2026-10-10：口径变更（疑似单列）⇒ 必须升协议版本
-CODE_VERSION = "2.1.1"
+CODE_VERSION = "2.2.0"         # ★ 与协议口径同步（v2.2 变更后曾误留 2.1.1）
 
 MIN_SAMPLES = 40            # 20 意图 x 至少 2 入口; 工程默认值, 无实测依据
 MIN_INTENTS = 20
@@ -187,6 +187,9 @@ def compute(payload):
     per_entry = {}
     uncomputable = 0
     intents = set()
+    # ★★★ 2026-10-10：分别统计两道闸门各拦了几个入口 ⇒ 供顶层 flags 出声
+    gate_unknown = {"n": 0}
+    gate_suspected = {"n": 0}
 
     for e in payload.get("entries", []):
         entry = e.get("entry")
@@ -200,6 +203,11 @@ def compute(payload):
             #   这件事**只在能算出数时才报**，★ 而超限被拒的那一路**反而看不见它**（★ 那正好倒过来）。
             if r is not None:
                 unknown_values.update(r.get("unknown_relations") or [])
+                _why = r.get("note") or ""
+                if "未知占比" in _why:
+                    gate_unknown["n"] += 1
+                elif "疑似占比" in _why:
+                    gate_suspected["n"] += 1
             no_data.append({"entry": entry, "intent": intent,
                             "why": "空样本" if r is None else r.get("note")})
             rows.append({"entry": entry, "intent": intent, "result": None,
@@ -256,9 +264,19 @@ def compute(payload):
         flags.append("疑似付费位占比偏高,请复核 relation 判定")
     if unknown_values:
         flags.append(f"存在未识别 relation 值 {sorted(unknown_values, key=str)},"
-                     "已按非开放保守计入,请核对词表")
+                     "该部分不计入 observed 分母(亦不计入分子),请核对词表")
     if no_data:
         flags.append(f"{len(no_data)} 个入口无可用样本,未计入 per_entry")
+    # ★★★ 2026-10-10：两道闸门触发时**必须在 flags 里出声**（v2.2 补）。
+    #   ★ 起因：v2.2 把 unknown_rate / suspected_rate 做成闸门，但只写进了 detail 的 note
+    #     ⇒ ★★ 读的人拿到 openness_main=None，**分不清是"数据不足"还是"被闸门拦下"**。
+    #   ★ 报数纪律要求：不出数必须给理由。故在此把闸门原因提升到顶层 flags。
+    if gate_unknown and gate_unknown["n"]:
+        flags.append(f"{gate_unknown['n']} 个入口因未知占比超上限({UNKNOWN_MAX})判不可核,"
+                     "不出数(见 entries_without_data)")
+    if gate_suspected and gate_suspected["n"]:
+        flags.append(f"{gate_suspected['n']} 个入口因疑似占比超上限({SUSPECTED_MAX})判不可核,"
+                     "不出数(见 entries_without_data)")
     if not in_aggregate:
         flags.append(f"独立性:{effect} —— 该读数不参与聚合")
     elif not independent_reading:

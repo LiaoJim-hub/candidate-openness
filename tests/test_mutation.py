@@ -148,5 +148,35 @@ class TestMutation(unittest.TestCase):
                     os.remove(path)
 
 
+    def test_mutation_gate_must_speak_in_flags(self):
+        """★ 闸门必须在 flags 里出声，且未超限时【不】出声。
+
+        v2.2 引入两道闸门（unknown 超限 / suspected 超限），初版只把原因写进
+        detail.note，顶层 flags 一字不提 ⇒ 读的人拿到 openness_main=None，
+        分不清是"数据不足"还是"被闸门拦下"。本条用正反两测锁住该行为。
+        """
+        cases = {
+            "unknown": [{"relation": "independent"}, {"relation": "mystery"}],
+            "suspected": ([{"relation": "independent"}]
+                          + [{"relation": "suspected_paid"}] * 3),
+        }
+        ok_items = ([{"relation": "independent"}] * 9 + [{"relation": "mystery"}])
+        for kind, items in cases.items():
+            with self.subTest(gate=kind):
+                r = M.compute({**BASE, "entries": [
+                    {"entry": "E", "intent": "i", "items": items}]})
+                self.assertIsNone(r["openness_main"], "闸门未生效")
+                self.assertTrue(
+                    any("判不可核" in f for f in r["flags"]),
+                    f"闸门[{kind}]触发了但 flags 不出声 ⇒ 读的人不知为何没出数")
+                # ★ 反面：未超限时该告警必须【不】出现，否则告警恒真、抓不住机制
+                r2 = M.compute({**BASE, "entries": [
+                    {"entry": "E", "intent": "i", "items": ok_items}]})
+                self.assertIsNotNone(r2["openness_main"], "未超限却不出数")
+                self.assertFalse(
+                    any("判不可核" in f for f in r2["flags"]),
+                    f"未超限也报[{kind}]闸门 ⇒ 该告警恒真，抓不住机制")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
