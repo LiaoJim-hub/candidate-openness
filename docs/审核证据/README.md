@@ -9,7 +9,7 @@
 |---|---|---|
 | `probe-v20.py` | v2.0 代码 | 11 项发现的原始探测（P1–P11）。复现见 `docs/代码审核报告.md` |
 | `probe11.py` | v2.0 代码 | "均匀 vs 两极"指纹撞车专项探测（报告 P11 的独立复现） |
-| `probe-v21定版.py` | v2.1 定版代码 | 10 项发现的探测（D0–D10）。复现见 `docs/代码审核报告-v21定版.md` |
+| `probe-v21.py` | v2.1 定版代码 | 10 项发现的探测（D0–D10）。复现见 `docs/代码审核报告-v21.md` |
 | `mutation.py` | v2.1 定版代码 | **变异测试**：证明"自检 10 验结果不验机制" |
 | `rate_selftests.py` | v2.1 定版代码 | 把变异判据套到定版 13 条自检上，逐条评 L0/L1/L2 |
 
@@ -22,7 +22,7 @@
 python probe-v20.py
 
 # v2.1 定版探测：先把定版 §3 的代码落盘为 measure_v21定版.py（同目录）
-python probe-v21定版.py
+python probe-v21.py
 python mutation.py
 python rate_selftests.py
 ```
